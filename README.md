@@ -179,3 +179,59 @@ Request body:
 - Rotate tokens periodically
 - Restrict access if possible (private networking/IP filtering)
 - Be careful with repo-write endpoints in public environments
+
+## PowerShell CLI Usage
+
+You can run the agent directly from PowerShell via [scripts/hyva-agent.ps1](scripts/hyva-agent.ps1).
+
+### 1) Health Check
+
+```powershell
+pwsh ./scripts/hyva-agent.ps1 -Action health -ApiUrl "https://magento-ai-agent.onrender.com"
+```
+
+### 2) Single File Conversion
+
+```powershell
+$env:MAGENTO_API_TOKEN = "YOUR_TOKEN"
+pwsh ./scripts/hyva-agent.ps1 -Action transform-file `
+  -ApiUrl "https://magento-ai-agent.onrender.com" `
+  -InputFile "C:\luma\app\design\frontend\Vendor\theme\Magento_Catalog\templates\product\view.phtml" `
+  -OutputFile "C:\luma-converted\Magento_Catalog\templates\product\view.phtml"
+```
+
+### 3) Folder Batch Conversion (phtml/xml/js)
+
+```powershell
+$env:MAGENTO_API_TOKEN = "YOUR_TOKEN"
+pwsh ./scripts/hyva-agent.ps1 -Action transform-folder `
+  -ApiUrl "https://magento-ai-agent.onrender.com" `
+  -InputRoot "C:\luma" `
+  -OutputRoot "C:\luma-converted"
+```
+
+### 4) Repo Scan (hosted repo path)
+
+```powershell
+$env:MAGENTO_API_TOKEN = "YOUR_TOKEN"
+pwsh ./scripts/hyva-agent.ps1 -Action repo-scan `
+  -ApiUrl "https://magento-ai-agent.onrender.com" `
+  -RepoPath "/opt/render/project/src" `
+  -MaxFiles 50
+```
+
+### 5) Repo Convert Dry Run (hosted repo path)
+
+```powershell
+$env:MAGENTO_API_TOKEN = "YOUR_TOKEN"
+pwsh ./scripts/hyva-agent.ps1 -Action repo-convert-dry-run `
+  -ApiUrl "https://magento-ai-agent.onrender.com" `
+  -RepoPath "/opt/render/project/src" `
+  -MaxFiles 30 `
+  -BusinessContext "Keep pricing, tax, promo, stock, and customer-group behavior unchanged."
+```
+
+Notes:
+- `transform-folder` is the best option when your old Luma files are on your local machine.
+- `repo-*` actions only work for paths available inside the API host environment.
+- Pass `-Token` explicitly or set `MAGENTO_API_TOKEN` environment variable.
