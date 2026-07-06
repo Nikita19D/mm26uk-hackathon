@@ -1,5 +1,6 @@
 import os
 import subprocess
+from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
@@ -11,18 +12,26 @@ import uvicorn
 
 load_dotenv()
 
-app = FastAPI(title="Hyva Transform API", version="2.0.0")
+app = FastAPI(title="Hyva Transform API", version="2.1.0")
 
 BASE_INSTRUCTION = (
-    "You are an automated code-refactoring engine specializing in Magento storefront optimizations. "
-    "Your objective is to ingest legacy Magento Luma PHTML templates and output modern, high-performance Hyva Theme structures.\n\n"
-    "Strict Architectural Constraints:\n"
-    "1. Strip out all legacy script blocks, RequireJS modules, KnockoutJS bindings, and jQuery dependencies completely.\n"
-    "2. Restructure the raw HTML semantics, applying native utility classes from Tailwind CSS for all responsive layouts, spacing, and styling.\n"
-    "3. Translate all client-side interactive logic (such as toggles, dynamic dropdown visibility, or clicks) into lightweight inline Alpine.js attributes (e.g., x-data, @click, x-show).\n"
-    "4. Preserve all native backend PHP security contexts and variable outputs (e.g., $block->escapeHtml(), esc_html__()).\n\n"
-    "Output Enforcement: Return ONLY the raw, production-ready template code. Absolutely no Markdown wrapping ticks (```), introductory pleasantries, or explanations."
+    "You are a senior Magento-to-Hyva migration engine focused on safe, business-aware refactoring. "
+    "Convert legacy Magento storefront files into production-ready Hyva-compatible code while preserving feature behavior and business outcomes.\n\n"
+    "Core Rules:\n"
+    "1. Preserve business logic exactly: pricing behavior, stock visibility, personalization conditions, tax-related flows, promo logic, and customer-group behavior must not change.\n"
+    "2. Preserve backend safety and escaping contexts: keep secure output patterns and PHP variable usage intact.\n"
+    "3. Remove legacy frontend dependencies where possible: strip RequireJS, Knockout bindings, and jQuery patterns when safe to replace.\n"
+    "4. Prefer Tailwind utility classes and Alpine.js attributes for frontend behavior.\n"
+    "5. Keep Magento template contracts intact: do not rename required block variables, methods, XML handles, or IDs consumed by business flows.\n"
+    "6. If a section appears business-critical and uncertain, keep existing logic and only modernize presentation around it.\n"
+    "7. Return ONLY final code content. No markdown fences and no explanations."
 )
+
+FILE_TYPE_GUIDANCE = {
+    ".phtml": "Primary focus: migrate frontend interactions to Alpine.js and utility classes while preserving PHP-driven business conditions.",
+    ".xml": "Primary focus: preserve XML structure and semantics; only modernize layout/update nodes that are safe for Hyva compatibility.",
+    ".js": "Primary focus: remove legacy dependencies and keep only essential behavior that maps to Alpine.js or native JS.",
+}
 
 DEFAULT_FILE_PATTERNS = ["*.phtml", "*.xml", "*.js"]
 DEFAULT_MAX_FILES = 200
@@ -44,6 +53,8 @@ class RepoScanRequest(BaseModel):
     include_patterns: list[str] = Field(default_factory=lambda: list(DEFAULT_FILE_PATTERNS))
     exclude_dirs: list[str] = Field(default_factory=lambda: [".git", "vendor", "node_modules", "pub/static"])
     max_files: int = Field(default=DEFAULT_MAX_FILES, ge=1, le=2000)
+    modified_after: str | None = None
+    modified_before: str | None = None
 
 
 class RepoScanResponse(BaseModel):
@@ -68,6 +79,10 @@ class RepoConvertRequest(BaseModel):
     )
     max_files: int = Field(default=DEFAULT_MAX_FILES, ge=1, le=2000)
     max_file_size: int = Field(default=DEFAULT_MAX_FILE_SIZE, ge=1024, le=5 * 1024 * 1024)
+    modified_after: str | None = None
+    modified_before: str | None = None
+    business_context: str | None = None
+    preserve_business_logic: bool = True
 
 
 class FileChange(BaseModel):
@@ -147,9 +162,42 @@ def _resolve_repo_path(repo_path: str) -> Path:
     return target
 
 
+def _parse_iso_datetime(value: str | None, field_name: str) -> datetime | None:
+    if not value:
+        return None
+
+    normalized = value.strip().replace("Z", "+00:00")
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid {field_name}. Use ISO-8601 format (example: 2026-07-01T00:00:00Z)",
+        ) from exc
+
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+
+    return parsed.astimezone(timezone.utc)
+
+
 def _is_in_excluded_dir(path: Path, repo_root: Path, excluded_dirs: set[str]) -> bool:
     relative_parts = path.relative_to(repo_root).parts
     return any(part in excluded_dirs for part in relative_parts)
+
+
+def _is_in_modified_window(
+    file_path: Path,
+    modified_after: datetime | None,
+    modified_before: datetime | None,
+) -> bool:
+    mtime = datetime.fromtimestamp(file_path.stat().st_mtime, tz=timezone.utc)
+
+    if modified_after and mtime < modified_after:
+        return False
+    if modified_before and mtime > modified_before:
+        return False
+    return True
 
 
 def _collect_candidate_files(
@@ -157,6 +205,8 @@ def _collect_candidate_files(
     include_patterns: list[str],
     exclude_dirs: list[str],
     max_files: int,
+    modified_after: datetime | None = None,
+    modified_before: datetime | None = None,
 ) -> list[Path]:
     excluded = set(exclude_dirs)
     found: list[Path] = []
@@ -166,6 +216,8 @@ def _collect_candidate_files(
             if not path.is_file():
                 continue
             if _is_in_excluded_dir(path, repo_root, excluded):
+                continue
+            if not _is_in_modified_window(path, modified_after, modified_before):
                 continue
             found.append(path)
 
@@ -185,18 +237,79 @@ def generate_hyva_template(prompt: str) -> str:
         client = genai.Client(api_key=api_key)
         interaction = client.interactions.create(
             model="gemini-2.5-flash",
-            input=BASE_INSTRUCTION + "\n\n" + prompt.strip(),
+            input=prompt.strip(),
         )
         return interaction.output_text
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Model error: {str(exc)}")
 
 
-def _convert_file_contents(content: str, file_path: Path) -> str:
-    prompt = (
-        f"File path: {file_path.as_posix()}\n"
-        "Convert this Magento file for Hyva compatibility while preserving backend variables and escaping context.\n\n"
+def _file_age_policy(file_path: Path) -> str:
+    now = datetime.now(timezone.utc)
+    modified = datetime.fromtimestamp(file_path.stat().st_mtime, tz=timezone.utc)
+    age_days = (now - modified).days
+
+    if age_days <= 30:
+        return (
+            f"File age policy: recently updated ({age_days} days old). Apply minimal-risk changes and avoid broad structural rewrites."
+        )
+
+    return (
+        f"File age policy: older file ({age_days} days old). Broader cleanup is allowed, but business behavior must remain identical."
+    )
+
+
+def _build_conversion_prompt(
+    content: str,
+    file_path: Path,
+    repo_root: Path,
+    business_context: str | None,
+    preserve_business_logic: bool,
+) -> str:
+    relative_path = file_path.relative_to(repo_root).as_posix()
+    extension = file_path.suffix.lower()
+    modified = datetime.fromtimestamp(file_path.stat().st_mtime, tz=timezone.utc).isoformat()
+
+    business_rules = business_context.strip() if business_context else "No additional business context provided."
+    logic_directive = (
+        "Business logic protection: STRICT. Do not alter decision conditions, control flow outcomes, pricing rules, tax rules, or availability logic."
+        if preserve_business_logic
+        else "Business logic protection: NORMAL. Prefer preserving logic but minor refactoring is allowed when behavior remains equivalent."
+    )
+    type_guidance = FILE_TYPE_GUIDANCE.get(extension, "Apply safe Hyva-oriented modernization and preserve behavior.")
+
+    return (
+        f"{BASE_INSTRUCTION}\n\n"
+        f"Context Metadata:\n"
+        f"- File path: {relative_path}\n"
+        f"- File type: {extension or 'unknown'}\n"
+        f"- Last modified (UTC): {modified}\n"
+        f"- { _file_age_policy(file_path) }\n"
+        f"- File-specific guidance: {type_guidance}\n"
+        f"- {logic_directive}\n"
+        f"- Business context: {business_rules}\n\n"
+        "Validation Conditions Before Output:\n"
+        "1. Maintain same business-visible outcomes for pricing, add-to-cart behavior, stock messaging, and customer-group conditions.\n"
+        "2. Do not break Magento variable scopes, XML contracts, or block rendering assumptions.\n"
+        "3. Keep output as valid file content only.\n\n"
+        "Original File Content:\n"
         f"{content}"
+    )
+
+
+def _convert_file_contents(
+    content: str,
+    file_path: Path,
+    repo_root: Path,
+    business_context: str | None,
+    preserve_business_logic: bool,
+) -> str:
+    prompt = _build_conversion_prompt(
+        content=content,
+        file_path=file_path,
+        repo_root=repo_root,
+        business_context=business_context,
+        preserve_business_logic=preserve_business_logic,
     )
     return generate_hyva_template(prompt)
 
@@ -235,7 +348,7 @@ def hyva_transform(
     payload: TransformRequest,
     _auth: None = Depends(require_api_token),
 ) -> TransformResponse:
-    transformed = generate_hyva_template(payload.prompt)
+    transformed = generate_hyva_template(BASE_INSTRUCTION + "\n\n" + payload.prompt)
     return TransformResponse(
         request_id=str(uuid4()),
         transformed_template=transformed,
@@ -257,11 +370,16 @@ def repo_scan(
     _auth: None = Depends(require_api_token),
 ) -> RepoScanResponse:
     repo_root = _resolve_repo_path(payload.repo_path)
+    modified_after = _parse_iso_datetime(payload.modified_after, "modified_after")
+    modified_before = _parse_iso_datetime(payload.modified_before, "modified_before")
+
     files = _collect_candidate_files(
         repo_root,
         payload.include_patterns,
         payload.exclude_dirs,
         payload.max_files,
+        modified_after,
+        modified_before,
     )
 
     return RepoScanResponse(
@@ -278,11 +396,16 @@ def repo_convert(
     _auth: None = Depends(require_api_token),
 ) -> RepoConvertResponse:
     repo_root = _resolve_repo_path(payload.repo_path)
+    modified_after = _parse_iso_datetime(payload.modified_after, "modified_after")
+    modified_before = _parse_iso_datetime(payload.modified_before, "modified_before")
+
     files = _collect_candidate_files(
         repo_root,
         payload.include_patterns,
         payload.exclude_dirs,
         payload.max_files,
+        modified_after,
+        modified_before,
     )
 
     changed_files: list[FileChange] = []
@@ -306,7 +429,13 @@ def repo_convert(
             continue
 
         try:
-            converted = _convert_file_contents(original, file_path)
+            converted = _convert_file_contents(
+                original,
+                file_path,
+                repo_root,
+                payload.business_context,
+                payload.preserve_business_logic,
+            )
         except HTTPException:
             raise
         except Exception as exc:

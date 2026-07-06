@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: magento-hyva-converter-api
+    runtime: python
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn api_server:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: MAGENTO_REPO_ROOT
+        value: /opt/render/project/src
+      - key: API_KEY
+        sync: false
+      - key: MAGENTO_API_TOKEN
+        sync: false
