@@ -1,0 +1,36 @@
+{
+	"name": "MageOs Codespaces Dev Container",
+    "build": {
+        "dockerfile": "Dockerfile"
+    },
+    "features": {
+        "ghcr.io/devcontainers/features/docker-in-docker:2.12.4": {}
+    },
+	"forwardPorts": [8080, 8081, 3306, 6379, 1025, 8025, 9200],
+	"portsAttributes": {
+	  "8080": { "label": "Mage-OS/Magento" },
+      "8081": { "label": "PHP MyAdmin" },
+	  "3306": { "label": "MySQL" },
+	  "6379": { "label": "Valkey" },
+	  "1025": { "label": "Mailpit SMTP" },
+	  "8025": { "label": "Mailpit Web" },
+	  "9200": { "label": "OpenSearch" }
+	},
+	"onCreateCommand": "bash -c '.devcontainer/scripts/setup.sh'",
+    "postAttachCommand": "bash -c '.devcontainer/scripts/start.sh'"
+	,
+	"containerEnv": {
+	    "PLATFORM_NAME": "${localEnv:PLATFORM_NAME:mage-os}",
+		"INSTALL_MAGENTO": "${localEnv:INSTALL_MAGENTO:YES}",
+		"INSTALL_SAMPLE_DATA": "${localEnv:INSTALL_SAMPLE_DATA:YES}",
+	    "HYVA_LICENCE_KEY": "cd1770b8de26b8f07d8ef33c4511f7483b466687e78fbcc41fff0aed37aa",
+		"HYVA_PROJECT_NAME": "codespaces-dev-9qff6",
+	    "MAGENTO_COMPOSER_AUTH_USER": "${localEnv:MAGENTO_COMPOSER_AUTH_USER:}",
+	    "MAGENTO_COMPOSER_AUTH_PASS": "${localEnv:MAGENTO_COMPOSER_AUTH_PASS:}",
+	    "MAGENTO_VERSION": "${localEnv:MAGENTO_VERSION:2.4.9}",
+	    "MAGENTO_ADMIN_USERNAME": "${localEnv:MAGENTO_ADMIN_USERNAME:admin}",
+	    "MAGENTO_ADMIN_PASSWORD": "${localEnv:MAGENTO_ADMIN_PASSWORD:password1}",
+	    "MAGENTO_ADMIN_EMAIL": "${localEnv:MAGENTO_ADMIN_EMAIL:admin@example.com}",
+	    "MYSQL_ROOT_PASSWORD": "${localEnv:MYSQL_ROOT_PASSWORD:password}"
+	}
+}

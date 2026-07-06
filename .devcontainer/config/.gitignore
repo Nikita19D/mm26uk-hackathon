@@ -1,0 +1,193 @@
+# ============================================
+# IDE & Editor Files
+# ============================================
+/.buildpath
+/.cache
+/.metadata
+/.project
+/.settings
+/.idea
+/.vscode
+atlassian*
+/nbproject
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+.editorconfig
+
+# ============================================
+# Magento Core Files & Directories
+# ============================================
+
+# Composer dependencies
+/vendor/
+
+# Magento core binaries
+/bin/
+
+# Core development tools and tests
+/dev/
+
+# Core library files
+/lib/
+
+# Setup and installation tools
+/setup/
+
+# PHP server configuration
+/phpserver/
+
+# Public directory - ignore core files but keep entry points
+/pub/*
+/pub/errors/
+!/pub/media/
+!/pub/static/
+
+# ============================================
+# Generated & Temporary Files
+# ============================================
+
+# Generated code
+/generated/
+
+# Variable data (cache, sessions, logs, reports)
+/var/*
+
+# Public static files (generated)
+/pub/static/*
+
+# Public media files (uploaded content)
+/pub/media/*
+
+# Sitemap
+/sitemap
+/sitemap.xml
+
+# ============================================
+# Magento Configuration Files
+# ============================================
+
+# Environment-specific configuration (contains DB credentials, etc.)
+/app/etc/env.php
+
+# Core Magento app directory (ignore core, keep custom)
+/app/*
+# Keep custom code, design, and i18n
+!/app/code/
+!/app/design/
+!/app/i18n/
+# Keep important configuration files
+!/app/etc/
+/app/etc/*
+!/app/etc/config.php
+!/app/etc/hyva-themes.json
+
+# ============================================
+# Files Re-generated Through Composer
+# ============================================
+/CHANGELOG.md
+/CONTRIBUTING.md
+/COPYING.txt
+/ISSUE_TEMPLATE.md
+/LICENSE_AFL.txt
+/LICENSE.txt
+/Gruntfile.js.sample
+/nginx.conf.sample
+/package.json.sample
+/php.ini.sample
+/auth.json.sample
+/.php_cs
+/.php_cs.dist
+/.travis.yml
+/SECURITY.md
+/grunt-config.json.sample
+/index.php
+/.user.ini
+/.php-cs-fixer.dist.php
+.htaccess.sample
+.htaccess
+
+# ============================================
+# Development & Build Tools
+# ============================================
+
+# Node modules
+/node_modules/
+
+# NPM files
+npm-debug.log
+package-lock.json
+yarn.lock
+
+# Grunt
+/.grunt/
+
+# ============================================
+# Security & Credentials
+# ============================================
+
+# Auth files
+/auth.json
+
+# Environment files
+/.env
+/.env.*
+!/.env.example
+
+# DevContainer flags
+/.devcontainer/db-installed.flag
+
+# ============================================
+# Testing & Quality Tools
+# ============================================
+
+# PHPUnit
+/phpunit.xml
+/.phpunit.result.cache
+
+# Integration tests
+/dev/tests/integration/tmp/
+/dev/tests/integration/phpunit.xml
+
+# Functional tests
+/dev/tests/functional/var/
+/dev/tests/functional/vendor/
+/dev/tests/functional/etc/config.xml
+/dev/tests/functional/credentials.xml.dist
+
+# ============================================
+# Backup & Archive Files
+# ============================================
+*.sql
+*.sql.gz
+*.tar
+*.tar.gz
+*.zip
+
+# Redis dump files
+dump.rdb
+
+
+# ============================================
+# Build System & Development Configuration
+# ============================================
+
+# ALWAYS track these files (they are part of your build system)
+!/.devcontainer/
+!/composer.json
+!/composer.lock
+!/package.json
+!/Gruntfile.js
+!/README.md
+!/.gitignore
+!/.gitattributes
+
+# ============================================
+# Custom Development Files
+# ============================================
+
+# Custom modules in app/code/ will be tracked
+# Custom themes in app/design/ will be tracked
+# Custom translations in app/i18n/ will be tracked
+# However, vendor-provided themes/modules are ignored (they come from composer)
